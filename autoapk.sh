@@ -2,8 +2,7 @@
 
 set -e
 APK=$1
-RESULTS_DIR="results/"
-mkdir -p "$RESULTS_DIR" 
+RESULTS_DIR="results_$APK/"
 APKDECOMP="$RESULTS_DIR""$APK"_decomp
 
 if [[ -z "$APK" ]]; then
@@ -12,6 +11,8 @@ if [[ -z "$APK" ]]; then
 	echo "Placer les splits et le base.apk dans un dossier 'apks/' à côté de ce script."
     exit 1
 fi
+
+mkdir -p "$RESULTS_DIR" 
 
 # DECOMP APK
 if [[ -d "$APKDECOMP" ]]; then
@@ -177,7 +178,7 @@ read -p "[i] Appuie sur Entrée quand tu as terminé..."
 adb forward tcp:31415 tcp:31415 > /dev/null 2>&1
 
 # Préparation du fichier contenant les commandes utiles
-DROZER_CMDS="results/drozertest.txt"
+DROZER_CMDS="${RESULTS_DIR}drozer_commands.txt"
 cat <<EOF > "$DROZER_CMDS"
 list
 run app.package.attacksurface $PACKAGE
