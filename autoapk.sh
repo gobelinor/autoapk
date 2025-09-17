@@ -4,6 +4,10 @@ set -e
 APK=$1
 RESULTS_DIR="results_$APK/"
 APKDECOMP="$RESULTS_DIR""$APK"_decomp
+DROZER_VENV="$HOME/Tools/drozer/drozervenv/bin/activate"
+FRIDA_VENV="$HOME/Tools/frida-scripts/fridavenv/bin/activate"
+FRIDA_SERV="$HOME/Tools/frida-server/frida-server-17.0.1-android-arm64"
+FRIDA_SCRIPTS_DIR="$HOME/Tools/frida-scripts"
 
 if [[ -z "$APK" ]]; then
     echo "Usage: $0 app.apk"
@@ -27,7 +31,6 @@ fi
 
 # EXTRACT PACKAGE NAME
 PACKAGE=$(cat "$APKDECOMP"/AndroidManifest.xml | grep package | sed -n 's/.*package="\([^"]*\)".*/\1/p')
-
 if [[ -z "$PACKAGE" ]]; then
 	echo "[!] Impossible de trouver le package dans AndroidManifest.xml"
 	exit 1
@@ -49,7 +52,6 @@ fi
 
 # APKLEAKS
 APKLEAKS_REPORT="${RESULTS_DIR}apkleaks_report.txt"
-
 if [[ -f "$APKLEAKS_REPORT" ]]; then
     echo "[i] Le rapport ApkLeaks '$APKLEAKS_REPORT' existe déjà. Skip."
 else
@@ -60,7 +62,6 @@ fi
 
 # Lance une nouvelle fenêtre dans la session tmux courante avec l'émulateur
 echo "[+] Lancement de l'émulateur..."
-
 if [[ -n "$TMUX" ]]; then
     echo "[i] Session tmux détectée. Lancement dans une nouvelle fenêtre 'emulator'."
     tmux new-window -d -n emulator "emulator -avd MyAndroid35arm64-v8a -no-snapshot-load"
@@ -76,32 +77,37 @@ else
     echo "[i] Tu peux y accéder avec : tmux attach-session -t emulator"
 fi
 
-echo "[i] Attends que l'émulateur soit prêt ou vérifie avec adb devices."
+echo "[i] Attends que l'émulateur soit prêt."
 read -p "[i] Appuie sur Entrée quand l'émulateur est prêt..."
 
 # Installation de l'APK dans l'émulateur
 echo "[+] Installation de l'APK (ou multiple splits)..."
-# Recherche des splits dans le dossier apks/
-if [[ -d "apks/" ]]; then
-    SPLITS=$(ls apks/split_config*.apk 2>/dev/null | sort)
-    BASEAPK=$(ls apks/base.apk 2>/dev/null)
-
-    if [[ -n "$BASEAPK" && -n "$SPLITS" ]]; then
-        echo "[i] Des splits ont été détectés. Utilisation de adb install-multiple..."
-        adb install-multiple $BASEAPK $SPLITS || {
-            echo "[!] Échec de l'installation avec adb install-multiple"
-            exit 1
-        }
-    elif [[ -n "$BASEAPK" ]]; then
-        echo "[i] Aucun split trouvé. Installation simple de base.apk"
-        adb install "$BASEAPK" || echo "[!] APK déjà installée ou échec."
-    else
-        echo "[!] Aucun fichier base.apk trouvé dans apks/"
-        exit 1
-    fi
+# Verification que l'APK est pas déja installé
+if adb shell pm list packages | grep -q "$PACKAGE"; then
+	echo "[i] L'application $PACKAGE est déjà installée. Skip installation."
 else
-    echo "[i] Aucun dossier 'apks/' trouvé. Installation de l'APK unique : $APK"
-    adb install "$APK" || echo "[!] APK déjà installée ou échec."
+	echo "[i] L'application $PACKAGE n'est pas installée. Procédure d'installation en cours..."
+	# Recherche des splits dans le dossier apks/
+	if [[ -d "apks/" ]]; then
+		SPLITS=$(ls apks/split_config*.apk 2>/dev/null | sort)
+		BASEAPK=$(ls apks/base.apk 2>/dev/null)
+		if [[ -n "$BASEAPK" && -n "$SPLITS" ]]; then
+			echo "[i] Des splits ont été détectés. Utilisation de adb install-multiple..."
+			adb install-multiple $BASEAPK $SPLITS || {
+				echo "[!] Échec de l'installation avec adb install-multiple"
+				exit 1
+			}
+		elif [[ -n "$BASEAPK" ]]; then
+			echo "[i] Aucun split trouvé. Installation simple de base.apk"
+			adb install "$BASEAPK" || echo "[!] APK déjà installée ou échec."
+		else
+			echo "[!] Aucun fichier base.apk trouvé dans apks/"
+			exit 1
+		fi
+	else
+		echo "[i] Aucun dossier 'apks/' trouvé. Installation de l'APK unique : $APK"
+		adb install "$APK" || echo "[!] APK déjà installée ou échec."
+	fi
 fi
 
 # Pidcat
@@ -130,9 +136,9 @@ adb root > /dev/null 2>&1 || true
 adb pull "/data/data/$PACKAGE" "${RESULTS_DIR}datadata_$PACKAGE" > /dev/null 2>&1 || \
     echo "[!] Impossible de pull /data/data (pas root ?)"
 adb pull "/sdcard/Android/data/$PACKAGE" "${RESULTS_DIR}sdcarddata_$PACKAGE" > /dev/null 2>&1 || \
-    echo "[!] Impossible de pull /sdcard/Android/data (accès refusé ?)"
+    echo "[!] Impossible de pull /sdcard/Android/data (inexistant ?)"
 
-# Endpoints Firebase 
+# Recherche Endpoints Firebase 
 FIREBASE_REPORT="${RESULTS_DIR}firebase_report.txt"
 if [[ -f "$FIREBASE_REPORT" ]]; then
 	echo "[i] Le rapport Firebase '$FIREBASE_REPORT' existe déjà. Skip."
@@ -143,7 +149,7 @@ else
 	}
 fi
 
-# Data Sensible ? 
+# Recherche Data Sensible ? 
 SENSITIVE_DATA_REPORT="${RESULTS_DIR}sensitive_data_report.txt"
 if [[ -f "$SENSITIVE_DATA_REPORT" ]]; then
 	echo "[i] Le rapport de données sensibles '$SENSITIVE_DATA_REPORT' existe déjà. Skip."
@@ -168,7 +174,7 @@ else
 	echo "[i] Tu peux y accéder avec : tmux attach-session -t jadx"
 fi
 
-# Drozer
+# DROZER
 
 # laisser l'utilisateur lancer drozer dans l'émulateur
 echo "[i] Tu peux maintenant lancer Drozer dans l'émulateur"
@@ -198,7 +204,6 @@ EOF
 echo "[✓] Commandes Drozer enregistrées dans $DROZER_CMDS"
 
 # Lance une nouvelle fenêtre tmux avec Drozer
-DROZER_VENV="/Users/tj/Tools/drozer/drozervenv/bin/activate"
 if [[ -n "$TMUX" ]]; then
 	echo "[i] Session tmux détectée. Lancement de Drozer dans une nouvelle fenêtre 'drozer'."
 	tmux new-window -d -n drozer "source $DROZER_VENV && drozer console connect"
@@ -219,49 +224,35 @@ cat "$DROZER_CMDS"
 echo "[i] Tu peux aussi copier-coller les commandes depuis : $DROZER_CMDS"
 
 # Frida bypass SSL pinning
-FRIDA_VENV="/Users/tj/Tools/frida-scripts/fridavenv/bin/activate"
-FRIDA_SERV_DIR="/Users/tj/Tools/frida-server/"
-
-adb push "$FRIDA_SERV_DIR/frida-server-17.0.1-android-arm64" /data/local/tmp/ > /dev/null 2>&1 || {
-	echo "[!] Erreur lors de la copie de frida-server sur l'émulateur."
+adb push "$FRIDA_SERV" /data/local/tmp/ > /dev/null 2>&1 || {
+	echo "[!] Erreur lors de la copie de frida-server dans l'émulateur."
 }
 adb shell chmod +x /data/local/tmp/frida-server-17.0.1-android-arm64 > /dev/null 2>&1 || {
 	echo "[!] Erreur lors de la modification des permissions de frida-server."
 }
-if [[ -n "$TMUX" ]]; then
-	echo "[i] Session tmux détectée. Lancement de Frida dans une nouvelle fenêtre 'frida'."
-	tmux new-window -d -n frida-serv "adb shell ./data/local/tmp/frida-server-17.0.1-android-arm64"
+if tmux has-session -t frida-serv 2>/dev/null; then
+	echo "[i] La session tmux 'frida-serv' existe déjà. Skip lancement."
 else
-	if tmux has-session -t frida-serv 2>/dev/null; then
-		echo "[i] La session tmux 'frida-serv' existe déjà. Skip lancement."
-	else
-		echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'frida-serv'."
-		tmux new-session -d -s frida-serv "adb shell ./data/local/tmp/frida-server-17.0.1-android-arm64"
-	fi
-	echo "[i] Tu peux y accéder avec : tmux attach-session -t frida"
+	echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'frida-serv'."
+	tmux new-session -d -s frida-serv "adb shell ./data/local/tmp/frida-server-17.0.1-android-arm64"
 fi
+echo "[i] Tu peux y accéder avec : tmux attach-session -t frida-serv"
 echo "[✓] Frida-server lancé dans la fenêtre tmux 'frida-serv'."
 
-if [[ -n "$TMUX" ]]; then
-	echo "[i] Session tmux détectée. Lancement de Frida dans une nouvelle fenêtre 'frida'."
-	tmux new-window -d -n frida-venv "source $FRIDA_VENV && frida-ps -U"
+if tmux has-session -t frida-venv 2>/dev/null; then
+	echo "[i] La session tmux 'frida-venv' existe déjà. Skip lancement."
 else
-	if tmux has-session -t frida-venv 2>/dev/null; then
-		echo "[i] La session tmux 'frida-venv' existe déjà. Skip lancement."
-	else
-		echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'frida-venv'."
-		tmux new-session -d -s frida-venv "source $FRIDA_VENV && frida-ps -U"
-	fi
-	echo "[i] Tu peux y accéder avec : tmux attach-session -t frida-venv"
+	echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'frida-venv'."
+	tmux new-session -d -s frida-venv "source $FRIDA_VENV && frida-ps -U"
 fi
+echo "[i] Tu peux y accéder avec : tmux attach-session -t frida-venv"
 
-FRIDA_SCRIPTS="/Users/tj/Tools/frida-scripts"
 
 echo "[✓] Frida lancé dans la fenêtre tmux 'frida-venv'."
 echo "[i] Tu peux exécuter des scripts Frida pour bypass SSL pinning, etc."
 echo "[i] Par exemple :"
-echo "frida -U -l ${FRIDA_SCRIPTS}/frida-interception-and-unpinning/config.js -l ${FRIDA_SCRIPTS}/frida-interception-and-unpinning/android/android-certificate-unpinning.js -p <PID>"
-echo "frida -U -l ${FRIDA_SCRIPTS}/custom/hello.js -l ${FRIDA_SCRIPTS}/custom/print_shared_pref_updates.js -p <PID>"
+echo "frida -U -l ${FRIDA_SCRIPTS_DIR}/frida-interception-and-unpinning/config.js -l ${FRIDA_SCRIPTS_DIR}/frida-interception-and-unpinning/android/android-certificate-unpinning.js -p <PID>"
+echo "frida -U -l ${FRIDA_SCRIPTS_DIR}/custom/hello.js -l ${FRIDA_SCRIPTS_DIR}/custom/print_shared_pref_updates.js -p <PID>"
 
 echo "[✓] Analyse terminée !"
 echo "[i] Rapports générés dans $RESULTS_DIR :"
