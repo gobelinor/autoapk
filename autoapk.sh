@@ -60,22 +60,16 @@ else
         echo "[!] Erreur lors de l'analyse avec ApkLeaks."
 fi
 
-# Lance une nouvelle fenêtre dans la session tmux courante avec l'émulateur
+# Lance l'émulateur
 echo "[+] Lancement de l'émulateur..."
-if [[ -n "$TMUX" ]]; then
-    echo "[i] Session tmux détectée. Lancement dans une nouvelle fenêtre 'emulator'."
-    tmux new-window -d -n emulator "emulator -avd MyAndroid35arm64-v8a -no-snapshot-load"
-    echo "[✓] Émulateur lancé dans la fenêtre tmux 'emulator'."
+if tmux has-session -t emulator 2>/dev/null; then
+	echo "[i] La session tmux 'emulator' existe déjà. Skip lancement."
 else
-    if tmux has-session -t emulator 2>/dev/null; then
-        echo "[i] La session tmux 'emulator' existe déjà. Skip lancement."
-    else
-        echo "[i] Pas de session tmux détectée. Création de la session 'emulator'."
-        tmux new-session -d -s emulator "emulator -avd MyAndroid35arm64-v8a -no-snapshot-load"
-        echo "[✓] Émulateur lancé dans la session tmux 'emulator'."
-    fi
-    echo "[i] Tu peux y accéder avec : tmux attach-session -t emulator"
+	echo "[i] Pas de session tmux détectée. Création de la session 'emulator'."
+	tmux new-session -d -s emulator "emulator -avd MyAndroid35arm64-v8a -no-snapshot-load"
+	echo "[✓] Émulateur lancé dans la session tmux 'emulator'."
 fi
+echo "[i] Tu peux y accéder avec : tmux attach-session -t emulator"
 
 echo "[i] Attends que l'émulateur soit prêt."
 read -p "[i] Appuie sur Entrée quand l'émulateur est prêt..."
