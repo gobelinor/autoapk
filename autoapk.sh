@@ -108,13 +108,13 @@ fi
 echo "[+] Lancement de Pidcat pour suivre les logs de l'application..."
 if [[ -n "$TMUX" ]]; then
 	echo "[i] Session tmux détectée. Lancement de Pidcat dans une nouvelle fenêtre 'pidcat'."
-	tmux new-window -d -n pidcat "pidcat -c --always-display-tags $PACKAGE"
+	tmux new-window -d -n pidcat-${APK} "pidcat -c --always-display-tags $PACKAGE"
 else	
-	if tmux has-session -t pidcat 2>/dev/null; then
+	if tmux has-session -t pidcat-${APK} 2>/dev/null; then
 		echo "[i] La session tmux 'pidcat' existe déjà. Skip lancement."
 	else
 		echo "[i] Pas de session tmux détectée. Création de la session 'pidcat'."
-		tmux new-session -d -s pidcat "pidcat -c --always-display-tags $PACKAGE"
+		tmux new-session -d -s pidcat-${APK} "pidcat -c --always-display-tags $PACKAGE"
 	fi
 	echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat"
 fi
@@ -157,13 +157,13 @@ fi
 # Lancement Jadx gui
 if [[ -n "$TMUX" ]]; then
 	echo "[i] Session tmux détectée. Lancement de Jadx dans une nouvelle fenêtre 'jadx'."
-	tmux new-window -d -n jadx "jadx-gui $APK"
+	tmux new-window -d -n jadx-${APK} "jadx-gui $APK"
 else
-	if tmux has-session -t jadx 2>/dev/null; then
+	if tmux has-session -t jadx-${APK} 2>/dev/null; then
 		echo "[i] La session tmux 'jadx' existe déjà. Skip lancement."
 	else
 		echo "[i] Pas de session tmux détectée. Création de la session 'jadx'."
-		tmux new-session -d -s jadx "jadx-gui $APK"
+		tmux new-session -d -s jadx-${APK} "jadx-gui $APK"
 	fi
 	echo "[i] Tu peux y accéder avec : tmux attach-session -t jadx"
 fi
