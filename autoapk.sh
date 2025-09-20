@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -e 
 
-set -e
 APK=$1
 RESULTS_DIR="results_$APK/"
 APKDECOMP="$RESULTS_DIR""$APK"_decomp
@@ -11,8 +11,8 @@ FRIDA_SCRIPTS_DIR="$HOME/Tools/frida-scripts"
 
 if [[ -z "$APK" ]]; then
     echo "Usage: $0 app.apk"
-	echo "Précision : l'APK doit être dans le même dossier que ce script."
-	echo "Placer les splits et le base.apk dans un dossier 'apks/' à côté de ce script."
+#	echo "Précision : l'APK doit être dans le même dossier que ce script."
+#	echo "Placer les splits et le base.apk dans un dossier 'apks/' à côté de ce script."
     exit 1
 fi
 
@@ -168,7 +168,7 @@ else
 	echo "[i] Tu peux y accéder avec : tmux attach-session -t jadx"
 fi
 
-# DROZER
+### DROZER ###
 
 # laisser l'utilisateur lancer drozer dans l'émulateur
 echo "[i] Tu peux maintenant lancer Drozer dans l'émulateur"
@@ -217,7 +217,8 @@ echo ""
 cat "$DROZER_CMDS" 
 echo "[i] Tu peux aussi copier-coller les commandes depuis : $DROZER_CMDS"
 
-# Frida bypass SSL pinning
+### FRIDA ###
+
 adb push "$FRIDA_SERV" /data/local/tmp/ > /dev/null 2>&1 || {
 	echo "[!] Erreur lors de la copie de frida-server dans l'émulateur."
 }
