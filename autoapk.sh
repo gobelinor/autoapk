@@ -107,16 +107,6 @@ else
 	fi
 fi
 
-# Pidcat
-echo "[+] Lancement de Pidcat pour suivre les logs de l'application..."
-if tmux has-session -t pidcat-${SAFE_PACKAGE} 2>/dev/null; then
-	echo "[i] La session tmux 'pidcat-${SAFE_PACKAGE}' existe déjà. Skip lancement."
-else
-	echo "[i] Pas de session tmux détectée. Création de la session 'pidcat'."
-	tmux new-session -d -s pidcat-${SAFE_PACKAGE} "pidcat -c --always-display-tags $SAFE_PACKAGE"
-fi
-echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat-${SAFE_PACKAGE}"
-
 # Laisser l'utilisateur tester l'application dans l'émulateur pour creer de la data 
 echo "[i] Tu peux maintenant tester l'application dans l'émulateur pour générer des données."
 echo "[i] Utilise 'skibidi' le plus possible pour générer des données."
@@ -204,6 +194,19 @@ echo "[i] Tu peux exécuter les commandes suivantes dans Drozer :"
 echo ""
 cat "$DROZER_CMDS" 
 echo "[i] Tu peux aussi copier-coller les commandes depuis : $DROZER_CMDS"
+
+# Pidcat
+
+echo "[+] Lancement de Pidcat pour suivre les logs de l'application..."
+if tmux has-session -t pidcat-${SAFE_PACKAGE} 2>/dev/null; then
+	echo "[i] La session tmux 'pidcat-${SAFE_PACKAGE}' existe déjà. Skip lancement."
+else
+	echo "[i] Pas de session tmux détectée. Création de la session 'pidcat-${SAFE_PACKAGE}'."
+	echo "pidcat -c --always-display-tags $PACKAGE"
+	tmux new-session -d -s pidcat-${SAFE_PACKAGE} "pidcat -c --always-display-tags $PACKAGE"
+fi
+echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat-${SAFE_PACKAGE}"
+
 
 ### FRIDA ###
 
