@@ -34,7 +34,7 @@ MATCHES=()
 
 while IFS= read -r line; do
   MATCHES+=("$line")
-done < <(adb shell pm path $PACKAGE | grep "$APPNAME" | sed 's/package://')
+done < <(adb shell pm path $PACKAGE | sed 's/package://')
 
 cd "$APKSDIR"
 
