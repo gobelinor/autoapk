@@ -10,7 +10,8 @@ FRIDA_SERV="$HOME/Tools/frida-server/frida-server-17.0.1-android-arm64"
 FRIDA_SCRIPTS_DIR="$HOME/Tools/frida-scripts"
 
 if [[ -z "$APK" ]]; then
-    echo "Usage: $0 app.apk"
+	echo "Usage: $0 app.apk (if only one .apk)"
+	echo "or: $0 ./apks/base.apk (if multiple splits in apks/ folder)"
 #	echo "Précision : l'APK doit être dans le même dossier que ce script."
 #	echo "Placer les splits et le base.apk dans un dossier 'apks/' à côté de ce script."
     exit 1
@@ -108,13 +109,13 @@ fi
 echo "[+] Lancement de Pidcat pour suivre les logs de l'application..."
 if [[ -n "$TMUX" ]]; then
 	echo "[i] Session tmux détectée. Lancement de Pidcat dans une nouvelle fenêtre 'pidcat'."
-	tmux new-window -d -n pidcat-${APK} "pidcat -c --always-display-tags $PACKAGE"
+	tmux new-window -d -n pidcat-${PACKAGE} "pidcat -c --always-display-tags $PACKAGE"
 else	
-	if tmux has-session -t pidcat-${APK} 2>/dev/null; then
+	if tmux has-session -t pidcat-${PACKAGE} 2>/dev/null; then
 		echo "[i] La session tmux 'pidcat' existe déjà. Skip lancement."
 	else
 		echo "[i] Pas de session tmux détectée. Création de la session 'pidcat'."
-		tmux new-session -d -s pidcat-${APK} "pidcat -c --always-display-tags $PACKAGE"
+		tmux new-session -d -s pidcat-${PACKAGE} "pidcat -c --always-display-tags $PACKAGE"
 	fi
 	echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat"
 fi
@@ -157,13 +158,13 @@ fi
 # Lancement Jadx gui
 if [[ -n "$TMUX" ]]; then
 	echo "[i] Session tmux détectée. Lancement de Jadx dans une nouvelle fenêtre 'jadx'."
-	tmux new-window -d -n jadx-${APK} "jadx-gui $APK"
+	tmux new-window -d -n jadx-${PACKAGE} "jadx-gui $APK"
 else
-	if tmux has-session -t jadx-${APK} 2>/dev/null; then
+	if tmux has-session -t jadx-${PACKAGE} 2>/dev/null; then
 		echo "[i] La session tmux 'jadx' existe déjà. Skip lancement."
 	else
 		echo "[i] Pas de session tmux détectée. Création de la session 'jadx'."
-		tmux new-session -d -s jadx-${APK} "jadx-gui $APK"
+		tmux new-session -d -s jadx-${PACKAGE} "jadx-gui $APK"
 	fi
 	echo "[i] Tu peux y accéder avec : tmux attach-session -t jadx"
 fi
