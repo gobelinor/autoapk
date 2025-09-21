@@ -2,8 +2,8 @@
 set -e 
 
 APK=$1
-RESULTS_DIR="results_$APK/"
-APKDECOMP="$RESULTS_DIR""$APK"_decomp
+RESULTS_DIR="results/"
+APKDECOMP="$RESULTS_DIR"_decomp
 DROZER_VENV="$HOME/Tools/drozer/drozervenv/bin/activate"
 FRIDA_VENV="$HOME/Tools/frida-scripts/fridavenv/bin/activate"
 FRIDA_SERV="$HOME/Tools/frida-server/frida-server-17.0.1-android-arm64"
@@ -38,6 +38,8 @@ if [[ -z "$PACKAGE" ]]; then
 else
 	echo "[+] Package trouvé : $PACKAGE"
 fi
+
+SAFE_PACKAGE=$(echo "$PACKAGE" | tr '.' '_')
 
 # Backup allowed ? 
 BACKUP_ALLOWED=$(cat "$APKDECOMP"/AndroidManifest.xml | grep allowBackup | sed -n 's/.*allowBackup="\([^"]*\)".*/\1/p')
@@ -107,18 +109,13 @@ fi
 
 # Pidcat
 echo "[+] Lancement de Pidcat pour suivre les logs de l'application..."
-if [[ -n "$TMUX" ]]; then
-	echo "[i] Session tmux détectée. Lancement de Pidcat dans une nouvelle fenêtre 'pidcat'."
-	tmux new-window -d -n pidcat-${PACKAGE} "pidcat -c --always-display-tags $PACKAGE"
-else	
-	if tmux has-session -t pidcat-${PACKAGE} 2>/dev/null; then
-		echo "[i] La session tmux 'pidcat' existe déjà. Skip lancement."
-	else
-		echo "[i] Pas de session tmux détectée. Création de la session 'pidcat'."
-		tmux new-session -d -s pidcat-${PACKAGE} "pidcat -c --always-display-tags $PACKAGE"
-	fi
-	echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat"
+if tmux has-session -t pidcat-${SAFE_PACKAGE} 2>/dev/null; then
+	echo "[i] La session tmux 'pidcat-${SAFE_PACKAGE}' existe déjà. Skip lancement."
+else
+	echo "[i] Pas de session tmux détectée. Création de la session 'pidcat'."
+	tmux new-session -d -s pidcat-${SAFE_PACKAGE} "pidcat -c --always-display-tags $SAFE_PACKAGE"
 fi
+echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat-${SAFE_PACKAGE}"
 
 # Laisser l'utilisateur tester l'application dans l'émulateur pour creer de la data 
 echo "[i] Tu peux maintenant tester l'application dans l'émulateur pour générer des données."
@@ -133,7 +130,7 @@ adb pull "/data/data/$PACKAGE" "${RESULTS_DIR}datadata_$PACKAGE" > /dev/null 2>&
 adb pull "/sdcard/Android/data/$PACKAGE" "${RESULTS_DIR}sdcarddata_$PACKAGE" > /dev/null 2>&1 || \
     echo "[!] Impossible de pull /sdcard/Android/data (inexistant ?)"
 
-# Recherche Endpoints Firebase 
+# Recherche Endpoints Firebase [relativement inutile avec apkleaks, il faudrait remplacer par un test de connexion aux endpoints]
 FIREBASE_REPORT="${RESULTS_DIR}firebase_report.txt"
 if [[ -f "$FIREBASE_REPORT" ]]; then
 	echo "[i] Le rapport Firebase '$FIREBASE_REPORT' existe déjà. Skip."
@@ -144,7 +141,7 @@ else
 	}
 fi
 
-# Recherche Data Sensible ? 
+# Recherche Data Sensible ?  
 SENSITIVE_DATA_REPORT="${RESULTS_DIR}sensitive_data_report.txt"
 if [[ -f "$SENSITIVE_DATA_REPORT" ]]; then
 	echo "[i] Le rapport de données sensibles '$SENSITIVE_DATA_REPORT' existe déjà. Skip."
@@ -155,19 +152,14 @@ else
 	}
 fi
 
-# Lancement Jadx gui
-if [[ -n "$TMUX" ]]; then
-	echo "[i] Session tmux détectée. Lancement de Jadx dans une nouvelle fenêtre 'jadx'."
-	tmux new-window -d -n jadx-${PACKAGE} "jadx-gui $APK"
+# JADX
+if tmux has-session -t jadx-${SAFE_PACKAGE} 2>/dev/null; then
+	echo "[i] La session tmux 'jadx-${SAFE_PACKAGE}' existe déjà. Skip."
 else
-	if tmux has-session -t jadx-${PACKAGE} 2>/dev/null; then
-		echo "[i] La session tmux 'jadx' existe déjà. Skip lancement."
-	else
-		echo "[i] Pas de session tmux détectée. Création de la session 'jadx'."
-		tmux new-session -d -s jadx-${PACKAGE} "jadx-gui $APK"
-	fi
-	echo "[i] Tu peux y accéder avec : tmux attach-session -t jadx"
+	echo "[i] Pas de session tmux détectée. Création de la session 'jadx-${SAFE_PACKAGE}'."
+	tmux new-session -d -s jadx-${SAFE_PACKAGE} "jadx-gui $APK"
 fi
+echo "[i] Tu peux y accéder avec : tmux attach-session -t jadx-${SAFE_PACKAGE}"
 
 ### DROZER ###
 
@@ -199,18 +191,13 @@ EOF
 echo "[✓] Commandes Drozer enregistrées dans $DROZER_CMDS"
 
 # Lance une nouvelle fenêtre tmux avec Drozer
-if [[ -n "$TMUX" ]]; then
-	echo "[i] Session tmux détectée. Lancement de Drozer dans une nouvelle fenêtre 'drozer'."
-	tmux new-window -d -n drozer "source $DROZER_VENV && drozer console connect"
+if tmux has-session -t drozer 2>/dev/null; then
+	echo "[i] La session tmux 'drozer' existe déjà. Skip lancement."
 else
-	if tmux has-session -t drozer 2>/dev/null; then
-		echo "[i] La session tmux 'drozer' existe déjà. Skip lancement."
-	else
-		echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'drozer'."
-		tmux new-session -d -s drozer "source $DROZER_VENV && drozer console connect"
-	fi
-	echo "[i] Tu peux y accéder avec : tmux attach-session -t drozer"
-fi 
+	echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'drozer'."
+	tmux new-session -d -s drozer "source $DROZER_VENV && drozer console connect"
+fi
+echo "[i] Tu peux y accéder avec : tmux attach-session -t drozer"
 
 echo "[✓] Drozer lancé dans la fenêtre tmux 'drozer'."
 echo "[i] Tu peux exécuter les commandes suivantes dans Drozer :"
