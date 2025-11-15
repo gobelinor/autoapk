@@ -27,7 +27,7 @@ if [[ $(echo "$PACKAGE" | wc -l) -gt 1 ]]; then
   exit 1
 fi
 
-APKSDIR="./apks"
+APKSDIR="./apks_$1"
 mkdir -p "$APKSDIR"
 
 MATCHES=()
