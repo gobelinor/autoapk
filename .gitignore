@@ -1,3 +1,5 @@
 com*
 .DS_Store
 *.swp
+results*
+apks*
