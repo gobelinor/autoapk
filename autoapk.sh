@@ -139,9 +139,7 @@ if tmux has-session -t pidcat-${SAFE_PACKAGE} 2>/dev/null; then
 	echo "[i] La session tmux 'pidcat-${SAFE_PACKAGE}' existe déjà. Skip lancement."
 else
 	echo "[i] Pas de session tmux détectée. Création de la session 'pidcat-${SAFE_PACKAGE}'."
-	echo "pidcat -c --always-display-tags $PACKAGE"
-	tmux new-session -d -s pidcat-${SAFE_PACKAGE} "pidcat -c --always-display-tags"
-	tmux capture-pane -pt pidcat-${SAFE_PACKAGE} -S -200
+	tmux new-session -d -s pidcat-${SAFE_PACKAGE} "pidcat -c --always-display-tags $PACKAGE"
 fi
 echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat-${SAFE_PACKAGE}"
 
