@@ -1,23 +1,49 @@
 #!/usr/bin/env bash
 set -e 
 
-APK=$1
-RESULTS_DIR="results/"
-APKDECOMP="$RESULTS_DIR"_decomp
+ARG=$1
+RESULTS_DIR="results_$ARG/"
+APKDECOMP="$RESULTS_DIR"_decompiled_apk/
+APKUNZIP="$RESULTS_DIR"unzipped_apk/
 DROZER_VENV="$HOME/Tools/drozer/drozervenv/bin/activate"
 FRIDA_VENV="$HOME/Tools/frida-scripts/fridavenv/bin/activate"
 FRIDA_SERV="$HOME/Tools/frida-server/frida-server-17.0.1-android-arm64"
 FRIDA_SCRIPTS_DIR="$HOME/Tools/frida-scripts"
+EMULATOR_IMAGE="MyAndroid35arm64-v8a"
 
-if [[ -z "$APK" ]]; then
+
+if [[ -z "$ARG" ]]; then
 	echo "Usage: $0 app.apk (if only one .apk)"
-	echo "or: $0 ./apks/base.apk (if multiple splits in apks/ folder)"
-#	echo "Précision : l'APK doit être dans le même dossier que ce script."
-#	echo "Placer les splits et le base.apk dans un dossier 'apks/' à côté de ce script."
+	echo "or: $0 ./apks_appname (if multiple splits in apks/ folder)"
     exit 1
 fi
 
 mkdir -p "$RESULTS_DIR" 
+
+if [[ -f "$ARG" ]]; then
+	APK="$ARG"
+elif [[ -d "$ARG" ]]; then
+	APKS_DIR="$ARG"
+	APK="$APKS_DIR/base.apk"
+	if [[ ! -f "$APK" ]]; then
+		echo "[!] Fichier APK '$APK' introuvable."
+		exit 1
+	fi
+else
+	echo "[!] Argument invalide. Fournir un fichier APK ou un dossier contenant apks/."
+	exit 1
+fi
+
+# Unzip APK
+if [[ -d "$APKUNZIP" ]]; then
+	echo "[i] Le dossier de l'APK dézippé existe déjà. Skip unzip."
+else
+	echo "[+] Unzip de l'APK..."
+	unzip -q "$APK" -d "$APKUNZIP" || {
+		echo "[!] Erreur lors de la décompression de l'APK";
+		exit 1;
+	}
+fi
 
 # DECOMP APK
 if [[ -d "$APKDECOMP" ]]; then
@@ -69,7 +95,7 @@ if tmux has-session -t emulator 2>/dev/null; then
 	echo "[i] La session tmux 'emulator' existe déjà. Skip lancement."
 else
 	echo "[i] Pas de session tmux détectée. Création de la session 'emulator'."
-	tmux new-session -d -s emulator "emulator -avd MyAndroid35arm64-v8a -no-snapshot-load"
+	tmux new-session -d -s emulator "emulator -avd $EMULATOR_IMAGE -no-snapshot-load"
 	echo "[✓] Émulateur lancé dans la session tmux 'emulator'."
 fi
 echo "[i] Tu peux y accéder avec : tmux attach-session -t emulator"
@@ -85,9 +111,9 @@ if adb shell pm list packages | grep -q "$PACKAGE"; then
 else
 	echo "[i] L'application $PACKAGE n'est pas installée. Procédure d'installation en cours..."
 	# Recherche des splits dans le dossier apks/
-	if [[ -d "apks/" ]]; then
-		SPLITS=$(ls apks/split_config*.apk 2>/dev/null | sort)
-		BASEAPK=$(ls apks/base.apk 2>/dev/null)
+	if [[ -d "$APKS_DIR" ]]; then
+		SPLITS=$(ls $APKS_DIR/split_config*.apk 2>/dev/null | sort)
+		BASEAPK=$(ls $APKS_DIR/base.apk 2>/dev/null)
 		if [[ -n "$BASEAPK" && -n "$SPLITS" ]]; then
 			echo "[i] Des splits ont été détectés. Utilisation de adb install-multiple..."
 			adb install-multiple $BASEAPK $SPLITS || {
@@ -107,9 +133,23 @@ else
 	fi
 fi
 
+# Pidcat
+echo "[+] Lancement de Pidcat pour suivre les logs de l'application..."
+if tmux has-session -t pidcat-${SAFE_PACKAGE} 2>/dev/null; then
+	echo "[i] La session tmux 'pidcat-${SAFE_PACKAGE}' existe déjà. Skip lancement."
+else
+	echo "[i] Pas de session tmux détectée. Création de la session 'pidcat-${SAFE_PACKAGE}'."
+	echo "pidcat -c --always-display-tags $PACKAGE"
+	tmux new-session -d -s pidcat-${SAFE_PACKAGE} "pidcat -c --always-display-tags"
+	tmux capture-pane -pt pidcat-${SAFE_PACKAGE} -S -200
+fi
+echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat-${SAFE_PACKAGE}"
+
+# Quel mail sera utilisé pour les tests ?
+read -p "[?] Quel email veux-tu utiliser pour les tests dans l'application ? " TEST_EMAIL
+
 # Laisser l'utilisateur tester l'application dans l'émulateur pour creer de la data 
 echo "[i] Tu peux maintenant tester l'application dans l'émulateur pour générer des données."
-echo "[i] Utilise 'skibidi' le plus possible pour générer des données."
 read -p "[i] Appuie sur Entrée quand tu as terminé..."
 
 # Pull des données de l'application
@@ -120,16 +160,19 @@ adb pull "/data/data/$PACKAGE" "${RESULTS_DIR}datadata_$PACKAGE" > /dev/null 2>&
 adb pull "/sdcard/Android/data/$PACKAGE" "${RESULTS_DIR}sdcarddata_$PACKAGE" > /dev/null 2>&1 || \
     echo "[!] Impossible de pull /sdcard/Android/data (inexistant ?)"
 
-# Recherche Endpoints Firebase [relativement inutile avec apkleaks, il faudrait remplacer par un test de connexion aux endpoints]
+# Firebase Analysis
 FIREBASE_REPORT="${RESULTS_DIR}firebase_report.txt"
 if [[ -f "$FIREBASE_REPORT" ]]; then
 	echo "[i] Le rapport Firebase '$FIREBASE_REPORT' existe déjà. Skip."
 else
-	echo "[+] Analyse des endpoints Firebase..."
-	grep -rni "firebase" | grep "http" > "$FIREBASE_REPORT" || {	
-		echo "[!] Erreur lors de l'analyse des endpoints Firebase."
+	echo "[+] Analyse Firebase..."
+	source $Firebase_VENV/bin/activate
+	python3 $HOME/Tools/firebase-sniper/firebase-sniper.py --apk-path "$APK" --output "$FIREBASE_REPORT" --email "$TEST_EMAIL" > /dev/null 2>&1 || {
+		echo "[!] Erreur lors de l'analyse Firebase."
 	}
+	deactivate
 fi
+
 
 # Recherche Data Sensible ?  
 SENSITIVE_DATA_REPORT="${RESULTS_DIR}sensitive_data_report.txt"
@@ -137,7 +180,7 @@ if [[ -f "$SENSITIVE_DATA_REPORT" ]]; then
 	echo "[i] Le rapport de données sensibles '$SENSITIVE_DATA_REPORT' existe déjà. Skip."
 else
 	echo "[+] Analyse des données sensibles..."
-	grep -rni "skibidi" "$RESULTS_DIR" > "$SENSITIVE_DATA_REPORT" || {
+	grep -rni "$TEST_EMAIL" "$RESULTS_DIR" > "$SENSITIVE_DATA_REPORT" || {
 		echo "[!] Erreur lors de l'analyse des données sensibles."
 	}
 fi
@@ -195,21 +238,8 @@ echo ""
 cat "$DROZER_CMDS" 
 echo "[i] Tu peux aussi copier-coller les commandes depuis : $DROZER_CMDS"
 
-# Pidcat
 
-echo "[+] Lancement de Pidcat pour suivre les logs de l'application..."
-if tmux has-session -t pidcat-${SAFE_PACKAGE} 2>/dev/null; then
-	echo "[i] La session tmux 'pidcat-${SAFE_PACKAGE}' existe déjà. Skip lancement."
-else
-	echo "[i] Pas de session tmux détectée. Création de la session 'pidcat-${SAFE_PACKAGE}'."
-	echo "pidcat -c --always-display-tags $PACKAGE"
-	tmux new-session -d -s pidcat-${SAFE_PACKAGE} "pidcat -c --always-display-tags $PACKAGE"
-fi
-echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat-${SAFE_PACKAGE}"
-
-
-### FRIDA ###
-
+### FRIDA ### Cursed land probablement a supprimer et faire un script a part pour tester de patch l'apk avec reflutter et l'install etc ...
 adb push "$FRIDA_SERV" /data/local/tmp/ > /dev/null 2>&1 || {
 	echo "[!] Erreur lors de la copie de frida-server dans l'émulateur."
 }
