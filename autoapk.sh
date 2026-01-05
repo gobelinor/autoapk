@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 set -e 
 
-ARG=$1
-RESULTS_DIR="results_$ARG/"
-APKDECOMP="$RESULTS_DIR"_decompiled_apk/
-APKUNZIP="$RESULTS_DIR"unzipped_apk/
-DROZER_VENV="$HOME/Tools/drozer/drozervenv/bin/activate"
-FRIDA_VENV="$HOME/Tools/frida-scripts/fridavenv/bin/activate"
+DROZER_VENV="$HOME/Tools/drozer/venv/bin/activate"
+FRIDA_VENV="$HOME/Tools/frida-scripts/venv/bin/activate"
 FRIDA_SERV="$HOME/Tools/frida-server/frida-server-17.0.1-android-arm64"
 FRIDA_SCRIPTS_DIR="$HOME/Tools/frida-scripts"
+FIREBASE_VENV="$HOME/Tools/firebase-sniper/venv/bin/activate"
 EMULATOR_IMAGE="MyAndroid35arm64-v8a"
 
+ARG=$1
+APP=$(basename "$ARG")
+RESULTS_DIR="results_$APP/"
+APKDECOMP="$RESULTS_DIR"decompiled_apk/
+APKUNZIP="$RESULTS_DIR"unzipped_apk/
 
 if [[ -z "$ARG" ]]; then
 	echo "Usage: $0 app.apk (if only one .apk)"
-	echo "or: $0 ./apks_appname (if multiple splits in apks/ folder)"
+	echo "or: $0 apks_appname (if multiple splits in apks/ folder)"
     exit 1
 fi
 
@@ -45,6 +47,14 @@ else
 	}
 fi
 
+# Detect if libflutter.so is used 
+FLUTTER_USED=$(grep -rl "libflutter.so" "$APKUNZIP" || true)
+if [[ -n "$FLUTTER_USED" ]]; then
+	echo "[i] L'application utilise Flutter (libflutter.so détecté)."
+else
+	echo "[i] L'application ne semble pas utiliser Flutter."
+fi
+
 # DECOMP APK
 if [[ -d "$APKDECOMP" ]]; then
     echo "[i] Le dossier de décompilation '$APKDECOMP' existe déjà. Skip apktool."
@@ -62,7 +72,7 @@ if [[ -z "$PACKAGE" ]]; then
 	echo "[!] Impossible de trouver le package dans AndroidManifest.xml"
 	exit 1
 else
-	echo "[+] Package trouvé : $PACKAGE"
+	echo "[+] Nom du package trouvé : $PACKAGE"
 fi
 
 SAFE_PACKAGE=$(echo "$PACKAGE" | tr '.' '_')
@@ -70,12 +80,12 @@ SAFE_PACKAGE=$(echo "$PACKAGE" | tr '.' '_')
 # Backup allowed ? 
 BACKUP_ALLOWED=$(cat "$APKDECOMP"/AndroidManifest.xml | grep allowBackup | sed -n 's/.*allowBackup="\([^"]*\)".*/\1/p')
 if [[ "$BACKUP_ALLOWED" == "false" ]]; then
-	echo "[i] Le backup est désactivé dans l'APK (allowBackup=false)."
+	echo "[i] Le backup est désactivé (allowBackup=false)."
 else
 	if [[ "$BACKUP_ALLOWED" == "true" ]]; then
-		echo "[i] Le backup est activé dans l'APK (allowBackup=true)."
+		echo "[i] Le backup est activé (allowBackup=true)."
 	else
-		echo "[i] Le backup n'est pas spécifié dans l'APK (allowBackup non défini)."
+		echo "[i] Le backup n'est pas spécifié (allowBackup non défini)."
 	fi
 fi
 
@@ -88,6 +98,31 @@ else
     apkleaks -f "$APK" -o "$APKLEAKS_REPORT" > /dev/null 2>&1 || \
         echo "[!] Erreur lors de l'analyse avec ApkLeaks."
 fi
+
+# Google maps key : Necessite de retravailler le script gmapsapiscanner pour eviter de stuck et devoir "press enter" et eviter d'avoir de la couleur dans l'output
+GOOGLE_MAPS_KEY_REPORT="${RESULTS_DIR}google_maps_key_report.txt"
+if [[ -f "$GOOGLE_MAPS_KEY_REPORT" ]]; then
+	echo "[i] Le rapport Google Maps Key '$GOOGLE_MAPS_KEY_REPORT' existe déjà. Skip."
+else
+	echo "[+] Recherche de clés Google Maps dans l'output de apkleaks"
+	GOOGLE_MAPS_KEYS=$(grep -Eo 'AIza[_0-9A-Za-z-]{35}' "$APKLEAKS_REPORT" | sort -u || true)
+	if [[ -n "$GOOGLE_MAPS_KEYS" ]]; then
+		echo "[i] Clés Google Maps détectées "
+		source $HOME/Tools/gmapsapiscanner/gmapvenv/bin/activate
+		# FOR EACH KEY
+		for KEY in $GOOGLE_MAPS_KEYS; do
+			echo "[i] Clé détectée : $KEY (Press Enter to process)"
+			python3 $HOME/Tools/gmapsapiscanner/maps_api_scanner.py --api-key "$KEY" >> "$GOOGLE_MAPS_KEY_REPORT" 2>&1 
+			echo "===========================================" >> "$GOOGLE_MAPS_KEY_REPORT"
+		done
+		deactivate
+	    echo "[i] Resultat enregistré dans $GOOGLE_MAPS_KEY_REPORT"
+	else
+		echo "[i] Aucune clé Google Maps détectée."
+		echo "Aucune clé Google Maps détectée." > "$GOOGLE_MAPS_KEY_REPORT"
+	fi
+fi
+
 
 # Lance l'émulateur
 echo "[+] Lancement de l'émulateur..."
@@ -134,17 +169,17 @@ else
 fi
 
 # Pidcat
-echo "[+] Lancement de Pidcat pour suivre les logs de l'application..."
-if tmux has-session -t pidcat-${SAFE_PACKAGE} 2>/dev/null; then
-	echo "[i] La session tmux 'pidcat-${SAFE_PACKAGE}' existe déjà. Skip lancement."
-else
-	echo "[i] Pas de session tmux détectée. Création de la session 'pidcat-${SAFE_PACKAGE}'."
-	tmux new-session -d -s pidcat-${SAFE_PACKAGE} "pidcat -c --always-display-tags $PACKAGE"
-fi
-echo "[i] Tu peux y accéder avec : tmux attach-session -t pidcat-${SAFE_PACKAGE}"
+echo "[+] Tu peux lancer Pidcat avec cette commande pour suivre les logs de l'application :"
+echo "pidcat -c --always-display-tags $PACKAGE"
 
 # Quel mail sera utilisé pour les tests ?
-read -p "[?] Quel email veux-tu utiliser pour les tests dans l'application ? " TEST_EMAIL
+read -p "[?] Quel email veux-tu utiliser pour tester l'application ? " TEST_EMAIL
+if [[ -z "$TEST_EMAIL" ]]; then
+	TEST_EMAIL=BUGBOUNTY$(date +%s)@yopmail.com
+	echo "[i] Aucun email fourni. Utilisation de l'email par défaut : $TEST_EMAIL"
+else
+	echo "[i] Email de test défini : $TEST_EMAIL"
+fi
 
 # Laisser l'utilisateur tester l'application dans l'émulateur pour creer de la data 
 echo "[i] Tu peux maintenant tester l'application dans l'émulateur pour générer des données."
@@ -164,13 +199,13 @@ if [[ -f "$FIREBASE_REPORT" ]]; then
 	echo "[i] Le rapport Firebase '$FIREBASE_REPORT' existe déjà. Skip."
 else
 	echo "[+] Analyse Firebase..."
-	source $Firebase_VENV/bin/activate
-	python3 $HOME/Tools/firebase-sniper/firebase-sniper.py --apk-path "$APK" --output "$FIREBASE_REPORT" --email "$TEST_EMAIL" > /dev/null 2>&1 || {
+	source $FIREBASE_VENV
+	APK_FULLPATH=$(realpath "$APK")
+	python3 $HOME/Tools/firebase-sniper/firebase-sniper.py --apk-path "$APK_FULLPATH" --output "$FIREBASE_REPORT" --user-email "$TEST_EMAIL" > /dev/null 2>&1 || {
 		echo "[!] Erreur lors de l'analyse Firebase."
 	}
 	deactivate
 fi
-
 
 # Recherche Data Sensible ?  
 SENSITIVE_DATA_REPORT="${RESULTS_DIR}sensitive_data_report.txt"
@@ -178,9 +213,8 @@ if [[ -f "$SENSITIVE_DATA_REPORT" ]]; then
 	echo "[i] Le rapport de données sensibles '$SENSITIVE_DATA_REPORT' existe déjà. Skip."
 else
 	echo "[+] Analyse des données sensibles..."
-	grep -rni "$TEST_EMAIL" "$RESULTS_DIR" > "$SENSITIVE_DATA_REPORT" || {
-		echo "[!] Erreur lors de l'analyse des données sensibles."
-	}
+	grep -rni "$TEST_EMAIL" "$RESULTS_DIR" > "$SENSITIVE_DATA_REPORT" || \
+		echo "[i] Aucune donnée sensible trouvée avec l'email '$TEST_EMAIL'."
 fi
 
 # JADX
@@ -204,6 +238,7 @@ adb forward tcp:31415 tcp:31415 > /dev/null 2>&1
 # Préparation du fichier contenant les commandes utiles
 DROZER_CMDS="${RESULTS_DIR}drozer_commands.txt"
 cat <<EOF > "$DROZER_CMDS"
+
 list
 run app.package.attacksurface $PACKAGE
 run app.package.info -a $PACKAGE
@@ -217,9 +252,8 @@ run scanner.provider.injection -a $PACKAGE
 run scanner.provider.sqltables -a $PACKAGE
 run scanner.provider.traversal -a $PACKAGE
 help app.provider.read
-EOF
 
-echo "[✓] Commandes Drozer enregistrées dans $DROZER_CMDS"
+EOF
 
 # Lance une nouvelle fenêtre tmux avec Drozer
 if tmux has-session -t drozer 2>/dev/null; then
@@ -232,41 +266,35 @@ echo "[i] Tu peux y accéder avec : tmux attach-session -t drozer"
 
 echo "[✓] Drozer lancé dans la fenêtre tmux 'drozer'."
 echo "[i] Tu peux exécuter les commandes suivantes dans Drozer :"
-echo ""
 cat "$DROZER_CMDS" 
 echo "[i] Tu peux aussi copier-coller les commandes depuis : $DROZER_CMDS"
 
+### FRIDA ###
 
-### FRIDA ### Cursed land probablement a supprimer et faire un script a part pour tester de patch l'apk avec reflutter et l'install etc ...
-adb push "$FRIDA_SERV" /data/local/tmp/ > /dev/null 2>&1 || {
-	echo "[!] Erreur lors de la copie de frida-server dans l'émulateur."
-}
-adb shell chmod +x /data/local/tmp/frida-server-17.0.1-android-arm64 > /dev/null 2>&1 || {
-	echo "[!] Erreur lors de la modification des permissions de frida-server."
-}
-if tmux has-session -t frida-serv 2>/dev/null; then
-	echo "[i] La session tmux 'frida-serv' existe déjà. Skip lancement."
-else
-	echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'frida-serv'."
-	tmux new-session -d -s frida-serv "adb shell ./data/local/tmp/frida-server-17.0.1-android-arm64"
+read -p "[?] Voulez vous mettre en place Frida ? (y/N)" USE_FRIDA
+if [[ "$USE_FRIDA" == "y" ]]; then
+	# Frida server est déposé dans l'émulateur, rendu executable et executé
+	adb push "$FRIDA_SERV" /data/local/tmp/ > /dev/null 2>&1 || {
+		echo "[!] Erreur lors de la copie de frida-server dans l'émulateur."
+	}
+	adb shell chmod +x /data/local/tmp/frida-server-17.0.1-android-arm64 > /dev/null 2>&1 || {
+		echo "[!] Erreur lors de la modification des permissions de frida-server."
+	}
+	if tmux has-session -t frida-serv 2>/dev/null; then
+		echo "[i] La session tmux 'frida-serv' existe déjà. Skip lancement."
+	else
+		echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'frida-serv'."
+		tmux new-session -d -s frida-serv "adb shell ./data/local/tmp/frida-server-17.0.1-android-arm64"
+	fi
+	echo "[i] Tu peux y accéder avec : tmux attach-session -t frida-serv"
+	echo "[✓] Frida-server lancé dans la fenêtre tmux 'frida-serv'."
+	echo "[i] Tu peux maintenant utiliser les commandes Frida suivantes :"
+	echo "source $FRIDA_VENV && frida-ps -U"
+	echo "frida -U -l ${FRIDA_SCRIPTS_DIR}/frida-interception-and-unpinning/config.js -l ${FRIDA_SCRIPTS_DIR}/frida-interception-and-unpinning/android/android-certificate-unpinning.js -p <PID>"
+	echo "frida -U -l ${FRIDA_SCRIPTS_DIR}/custom/hello.js -l ${FRIDA_SCRIPTS_DIR}/custom/print_shared_pref_updates.js -p <PID>"
 fi
-echo "[i] Tu peux y accéder avec : tmux attach-session -t frida-serv"
-echo "[✓] Frida-server lancé dans la fenêtre tmux 'frida-serv'."
 
-if tmux has-session -t frida-venv 2>/dev/null; then
-	echo "[i] La session tmux 'frida-venv' existe déjà. Skip lancement."
-else
-	echo "[i] Pas de session tmux détectée. Création d'une nouvelle session tmux nommée 'frida-venv'."
-	tmux new-session -d -s frida-venv "source $FRIDA_VENV && frida-ps -U"
-fi
-echo "[i] Tu peux y accéder avec : tmux attach-session -t frida-venv"
-
-
-echo "[✓] Frida lancé dans la fenêtre tmux 'frida-venv'."
-echo "[i] Tu peux exécuter des scripts Frida pour bypass SSL pinning, etc."
-echo "[i] Par exemple :"
-echo "frida -U -l ${FRIDA_SCRIPTS_DIR}/frida-interception-and-unpinning/config.js -l ${FRIDA_SCRIPTS_DIR}/frida-interception-and-unpinning/android/android-certificate-unpinning.js -p <PID>"
-echo "frida -U -l ${FRIDA_SCRIPTS_DIR}/custom/hello.js -l ${FRIDA_SCRIPTS_DIR}/custom/print_shared_pref_updates.js -p <PID>"
+# Fin
 
 echo "[✓] Analyse terminée !"
 echo "[i] Rapports générés dans $RESULTS_DIR :"
