@@ -235,7 +235,7 @@ read -p "[i] Appuie sur Entrée quand tu as terminé..."
 # Forward du port pour drozer
 adb forward tcp:31415 tcp:31415 > /dev/null 2>&1
 
-# Préparation du fichier contenant les commandes utiles
+# Préparation du fichier contenant les commandes drozer utiles
 DROZER_CMDS="${RESULTS_DIR}drozer_commands.txt"
 cat <<EOF > "$DROZER_CMDS"
 
@@ -287,11 +287,12 @@ if [[ "$USE_FRIDA" == "y" ]]; then
 		tmux new-session -d -s frida-serv "adb shell ./data/local/tmp/frida-server-17.0.1-android-arm64"
 	fi
 	echo "[i] Tu peux y accéder avec : tmux attach-session -t frida-serv"
-	echo "[✓] Frida-server lancé dans la fenêtre tmux 'frida-serv'."
 	echo "[i] Tu peux maintenant utiliser les commandes Frida suivantes :"
+	echo ""
 	echo "source $FRIDA_VENV && frida-ps -U"
 	echo "frida -U -l ${FRIDA_SCRIPTS_DIR}/frida-interception-and-unpinning/config.js -l ${FRIDA_SCRIPTS_DIR}/frida-interception-and-unpinning/android/android-certificate-unpinning.js -p <PID>"
 	echo "frida -U -l ${FRIDA_SCRIPTS_DIR}/custom/hello.js -l ${FRIDA_SCRIPTS_DIR}/custom/print_shared_pref_updates.js -p <PID>"
+	echo ""
 fi
 
 # Fin
