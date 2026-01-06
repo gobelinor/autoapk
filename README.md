@@ -87,7 +87,7 @@ Edit these variables at the top of the script if your setup differs:
 ### 1) Single APK
 
 ```bash
-./triage.sh path/to/app.apk
+./autoapk.sh path/to/app.apk
 ```
 
 ### 2) Split APKs directory
@@ -95,7 +95,7 @@ Edit these variables at the top of the script if your setup differs:
 Directory must contain `base.apk` and optional `split_config*.apk` files.
 
 ```bash
-./triage.sh path/to/split_apks_folder/
+./autoapk.sh path/to/split_apks_folder/
 ```
 
 ---
