@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -e 
 
+EMULATOR_IMAGE="MyAndroid35arm64-v8a"
 DROZER_VENV="$HOME/Tools/drozer/venv/bin/activate"
 FRIDA_VENV="$HOME/Tools/frida-scripts/venv/bin/activate"
 FRIDA_SERV="$HOME/Tools/frida-server/frida-server-17.0.1-android-arm64"
 FRIDA_SCRIPTS_DIR="$HOME/Tools/frida-scripts"
-FIREBASE_VENV="$HOME/Tools/firebase-sniper/venv/bin/activate"
-EMULATOR_IMAGE="MyAndroid35arm64-v8a"
+MAPS_API_SCANNER_SCRIPT="$HOME/Tools/gmapsapiscanner/maps_api_scanner.py"
+MAPS_API_SCANNER_VENV="$HOME/Tools/gmapsapiscanner/gmapvenv/bin/activate"
+FIREBASE_SNIPER_SCRIPT="$HOME/Tools/firebase-sniper/firebase-sniper.py"
+FIREBASE_SNIPER_VENV="$HOME/Tools/firebase-sniper/venv/bin/activate"
 
 ARG=$1
 APP=$(basename "$ARG")
@@ -99,7 +102,7 @@ else
         echo "[!] Erreur lors de l'analyse avec ApkLeaks."
 fi
 
-# Google maps key : Necessite de retravailler le script gmapsapiscanner pour eviter de stuck et devoir "press enter" et eviter d'avoir de la couleur dans l'output
+# Google maps key : Necessite de retravailler le script gmapsapiscanner pour eviter de stuck et devoir "press enter" et eviter d'avoir de la couleur mal formatée dans l'output
 GOOGLE_MAPS_KEY_REPORT="${RESULTS_DIR}google_maps_key_report.txt"
 if [[ -f "$GOOGLE_MAPS_KEY_REPORT" ]]; then
 	echo "[i] Le rapport Google Maps Key '$GOOGLE_MAPS_KEY_REPORT' existe déjà. Skip."
@@ -108,11 +111,11 @@ else
 	GOOGLE_MAPS_KEYS=$(grep -Eo 'AIza[_0-9A-Za-z-]{35}' "$APKLEAKS_REPORT" | sort -u || true)
 	if [[ -n "$GOOGLE_MAPS_KEYS" ]]; then
 		echo "[i] Clés Google Maps détectées "
-		source $HOME/Tools/gmapsapiscanner/gmapvenv/bin/activate
+		source $MAPS_API_SCANNER_VENV
 		# FOR EACH KEY
 		for KEY in $GOOGLE_MAPS_KEYS; do
 			echo "[i] Clé détectée : $KEY (Press Enter to process)"
-			python3 $HOME/Tools/gmapsapiscanner/maps_api_scanner.py --api-key "$KEY" >> "$GOOGLE_MAPS_KEY_REPORT" 2>&1 
+			python3 $MAPS_API_SCANNER_SCRIPT --api-key "$KEY" >> "$GOOGLE_MAPS_KEY_REPORT" 2>&1 
 			echo "===========================================" >> "$GOOGLE_MAPS_KEY_REPORT"
 		done
 		deactivate
@@ -199,9 +202,9 @@ if [[ -f "$FIREBASE_REPORT" ]]; then
 	echo "[i] Le rapport Firebase '$FIREBASE_REPORT' existe déjà. Skip."
 else
 	echo "[+] Analyse Firebase..."
-	source $FIREBASE_VENV
+	source $FIREBASE_SNIPER_VENV
 	APK_FULLPATH=$(realpath "$APK")
-	python3 $HOME/Tools/firebase-sniper/firebase-sniper.py --apk-path "$APK_FULLPATH" --output "$FIREBASE_REPORT" --user-email "$TEST_EMAIL" > /dev/null 2>&1 || {
+	python3 $FIREBASE_SNIPER_SCRIPT --apk-path "$APK_FULLPATH" --output "$FIREBASE_REPORT" --user-email "$TEST_EMAIL" > /dev/null 2>&1 || {
 		echo "[!] Erreur lors de l'analyse Firebase."
 	}
 	deactivate

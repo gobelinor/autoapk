@@ -61,8 +61,9 @@ This script assumes these venvs and paths exist (adjust if needed):
   - `~/Tools/frida-scripts/`
 - Frida server binary:
   - `~/Tools/frida-server/frida-server-17.0.1-android-arm64`
-- Firebase Sniper venv:
+- Firebase Sniper venv + script:
   - `~/Tools/firebase-sniper/venv/bin/activate`
+  - `~/Tools/firebase-sniper/firebase_sniper.py`
 - Google Maps API scanner venv:
   - `~/Tools/gmapsapiscanner/venv/bin/activate`
   - `~/Tools/gmapsapiscanner/maps_api_scanner.py`
@@ -79,6 +80,11 @@ Edit these variables at the top of the script if your setup differs:
 - `FRIDA_SERV=...`
 - `FRIDA_SCRIPTS_DIR=...`
 - `FIREBASE_VENV=...`
+- `MAPS_API_SCANNER_SCRIPT=...`
+- `MAPS_API_SCANNER_VENV=...`
+- `FIREBASE_SNIPER_SCRIPT=...`
+- `FIREBASE_SNIPER_VENV=...`
+
 
 ---
 
